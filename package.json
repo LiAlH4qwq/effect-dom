@@ -1,0 +1,38 @@
+{
+    "name": "effect-dom",
+    "version": "0.1.0",
+    "description": "Effect Dom",
+    "keywords": [],
+    "license": "MIT",
+    "author": "LiAlH4",
+    "repository": "github:lialh4qwq/effect-dom",
+    "homepage": "https://github.com/lialh4qwq/effect-dom",
+    "bugs": "https://github.com/lialh4qwq/effect-dom/issues",
+    "main": "src/index.ts",
+    "module": "src/index.ts",
+    "engines": {
+        "bun": ">1.0.0"
+    },
+    "files": [
+        "src/**/*",
+        "tsconfig.json",
+        "dist/**/*"
+    ],
+    "devDependencies": {
+        "@biomejs/biome": "^2.2.6",
+        "@happy-dom/global-registrator": "^20.0.4",
+        "@types/bun": "latest",
+        "tsc-alias": "^1"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "scripts": {
+        "prepublishOnly": "bun run compile",
+        "compile": "bun run tsc && bun run tsc-alias"
+    },
+    "types": "dist/index.d.ts",
+    "dependencies": {
+        "effect": "^3.18.4"
+    }
+}
