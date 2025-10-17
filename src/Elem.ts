@@ -1,11 +1,11 @@
-import { dual } from "effect/Function"
 import { Effect } from "effect"
-import type { ElemCons } from "./Types"
+import { dual } from "effect/Function"
 import {
-    SelSyntaxError,
     ElemNotFoundError,
     ElemTypeMismatchError,
+    SelSyntaxError,
 } from "./Errors"
+import type { ElemCons } from "./Types"
 
 export const elemIs: {
     <E extends Element>(what: ElemCons<E>): (elem: Element) => elem is E
