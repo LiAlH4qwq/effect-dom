@@ -4,6 +4,10 @@ Type-safe DOM manipulation with explicit, composable error handling.
 
 Stop wondering why `querySelector` returned null. Stop casting to types you're not sure about. Effect Dom makes DOM errors explicit but simple to handle. ✨
 
+![Version](https://img.shields.io/npm/v/%40lialh4%2Feffect-dom?style=for-the-badge)
+![License](https://img.shields.io/npm/l/%40lialh4%2Feffect-dom?style=for-the-badge)
+
+
 ## Why Effect Dom?
 
 **Explicit errors, zero surprises.** DOM operations fail in predictable ways—selectors can be malformed, elements might not exist, or be the wrong type. Effect Dom surfaces all these errors in your types, while keeping the happy path clean.
@@ -82,3 +86,9 @@ pnpm install effect-dom
 ## License
 
 MIT
+
+## Changelog
+
+### 0.1.0
+
+First version! :tada:
