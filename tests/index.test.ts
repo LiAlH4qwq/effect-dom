@@ -225,16 +225,16 @@ describe("test", () => {
             })
             test("success", () => {
                 const elem1 = document.createElement("audio")
-                elem1.id = "new-id"
+                elem1.classList.add("new-class")
                 document.body.appendChild(elem1)
                 const elem2 = document.createElement("audio")
-                elem2.id = "new-id"
+                elem2.classList.add("new-class")
                 document.body.appendChild(elem2)
                 const elem3 = document.createElement("audio")
-                elem3.id = "new-id"
+                elem3.classList.add("new-class")
                 document.body.appendChild(elem3)
                 expect(
-                    findElems(document, HTMLAudioElement, "#new-id").pipe(
+                    findElems(document, HTMLAudioElement, ".new-class").pipe(
                         Effect.either,
                         Effect.runSync,
                     ),
@@ -303,18 +303,20 @@ describe("test", () => {
                 ifr.src = "about:blank"
                 document.body.appendChild(ifr)
                 const elem1 = ifr.contentDocument!.createElement("audio")
-                elem1.id = "new-id"
+                elem1.classList.add("new-class")
                 ifr.contentDocument!.body.appendChild(elem1)
                 const elem2 = ifr.contentDocument!.createElement("audio")
-                elem2.id = "new-id"
+                elem2.classList.add("new-class")
                 ifr.contentDocument!.body.appendChild(elem2)
                 const elem3 = ifr.contentDocument!.createElement("audio")
-                elem3.id = "new-id"
+                elem3.classList.add("new-class")
                 ifr.contentDocument!.body.appendChild(elem3)
                 expect(
                     findElem(document, HTMLIFrameElement, "iframe").pipe(
                         Effect.flatMap(getInnerDoc),
-                        Effect.flatMap(findElems(HTMLAudioElement, "#new-id")),
+                        Effect.flatMap(
+                            findElems(HTMLAudioElement, ".new-class"),
+                        ),
                         Effect.either,
                         Effect.runSync,
                     ),

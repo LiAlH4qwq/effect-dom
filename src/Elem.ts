@@ -116,3 +116,13 @@ export const findElems: {
             ),
         ),
 )
+
+export const findElemOn =
+    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    (sel: string) =>
+        findElem(on, what, sel)
+
+export const findElemsOn =
+    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    (sel: string) =>
+        findElems(on, what, sel)
