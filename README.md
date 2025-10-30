@@ -29,7 +29,7 @@ audio.play()
 ### The Solution ✨
 
 ```typescript
-import { findElem } from "effect-dom/Elem"
+import { findElem } from "@lialh4/effect-dom/Elem"
 import { Effect } from "effect"
 
 const program = findElem(document, HTMLAudioElement, "#player").pipe(
@@ -54,8 +54,8 @@ const program = findElem(document, HTMLAudioElement, "#player").pipe(
 
 ```typescript
 import { Effect } from "effect"
-import { findElem } from "effect-dom/Elem"
-import { getInnerDoc } from "effect-dom/Doc"
+import { findElem } from "@lialh4/effect-dom/Elem"
+import { getInnerDoc } from "@lialh4/effect-dom/Doc"
 
 // Find iframe → get its document → find element inside
 const program = findElem(document, HTMLIFrameElement, "#my-iframe").pipe(
