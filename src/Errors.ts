@@ -14,5 +14,9 @@ export class ElemTypeMismatchError extends Data.TaggedError(
 )<{
     sel: string
     expect: ElemCons<Element>
-    actual: ElemCons<Element>
+    actual: ElemCons<Element>[]
+}> {}
+
+export class CrossOriginError extends Data.TaggedError("CrossOriginError")<{
+    iframe: HTMLIFrameElement
 }> {}

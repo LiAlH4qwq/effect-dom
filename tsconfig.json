@@ -14,18 +14,14 @@
         "noUnusedParameters": true,
         "strict": true,
         "noUncheckedSideEffectImports": true,
-        "declaration": true,
-        "emitDeclarationOnly": true,
-        "noEmitOnError": true,
-        "noEmit": false,
         "allowJs": false,
         "erasableSyntaxOnly": false,
+        "skipLibCheck": true,
+        "esModuleInterop": false,
+        "noEmit": true,
         "module": "preserve",
         "target": "esnext",
-        "outDir": "./dist",
-        "rootDir": "./src",
         "baseUrl": "./",
         "paths": {}
-    },
-    "include": ["./src/**/*"]
+    }
 }

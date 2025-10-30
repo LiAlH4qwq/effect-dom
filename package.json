@@ -2,37 +2,71 @@
     "name": "effect-dom",
     "version": "0.1.0",
     "description": "Effect Dom",
-    "keywords": [],
+    "keywords": [
+        "typescript",
+        "effect",
+        "dom"
+    ],
     "license": "MIT",
     "author": "LiAlH4",
     "repository": "github:lialh4qwq/effect-dom",
     "homepage": "https://github.com/lialh4qwq/effect-dom",
     "bugs": "https://github.com/lialh4qwq/effect-dom/issues",
-    "main": "src/index.ts",
-    "module": "src/index.ts",
-    "engines": {
-        "bun": ">1.0.0"
+    "type": "module",
+    "types": "./dist/dts/index.d.ts",
+    "module": "./dist/esm/index.js",
+    "main": "./dist/cjs/index.js",
+    "exports": {
+        ".": {
+            "types": "./dist/dts/index.d.ts",
+            "import": "./dist/esm/index.js",
+            "default": "./dist/cjs/index.js"
+        },
+        "./Types": {
+            "types": "./dist/dts/Types.d.ts",
+            "import": "./dist/esm/Types.js",
+            "default": "./dist/cjs/Types.js"
+        },
+        "./Errors": {
+            "types": "./dist/dts/Errors.d.ts",
+            "import": "./dist/esm/Errors.js",
+            "default": "./dist/cjs/Errors.js"
+        },
+        "./Doc": {
+            "types": "./dist/dts/Doc.d.ts",
+            "import": "./dist/esm/Doc.js",
+            "default": "./dist/cjs/Doc.js"
+        },
+        "./Elem": {
+            "types": "./dist/dts/Elem.d.ts",
+            "import": "./dist/esm/Elem.js",
+            "default": "./dist/cjs/Elem.js"
+        }
     },
     "files": [
-        "src/**/*",
-        "tsconfig.json",
         "dist/**/*"
     ],
+    "dependencies": {
+        "effect": "^3.18.4"
+    },
     "devDependencies": {
         "@biomejs/biome": "^2.2.6",
         "@happy-dom/global-registrator": "^20.0.4",
-        "@types/bun": "latest",
-        "tsc-alias": "^1"
+        "@types/bun": "latest"
     },
     "peerDependencies": {
         "typescript": "^5"
     },
     "scripts": {
-        "prepublishOnly": "bun run compile",
-        "compile": "bun run tsc && bun run tsc-alias"
-    },
-    "types": "dist/index.d.ts",
-    "dependencies": {
-        "effect": "^3.18.4"
+        "prepublishOnly": "bun run pack",
+        "pack": "bun run check && bun run compile",
+        "check": "bun run check:format && bun run check:lint && bun run check:types",
+        "check:format": "bun run biome format --write",
+        "check:lint": "bun run biome check --write",
+        "check:types": "bun run tsc",
+        "compile": "bun run compile:dts && bun run compile:esm && bun run compile:cjs",
+        "compile:dts": "bun run tsc -b tsconfig-dts.json",
+        "compile:esm": "bun run tsc -b tsconfig-esm.json",
+        "compile:cjs": "bun run tsc -b tsconfig-cjs.json"
     }
 }
