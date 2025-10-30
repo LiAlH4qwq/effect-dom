@@ -1,7 +1,7 @@
 {
-    "name": "effect-dom",
+    "name": "@lialh4/effect-dom",
     "version": "0.1.0",
-    "description": "Effect Dom",
+    "description": "Type-safe DOM manipulation with explicit, composable error handling.",
     "keywords": [
         "typescript",
         "effect",
@@ -9,7 +9,10 @@
     ],
     "license": "MIT",
     "author": "LiAlH4",
-    "repository": "github:lialh4qwq/effect-dom",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/lialh4qwq/effect-dom.git"
+    },
     "homepage": "https://github.com/lialh4qwq/effect-dom",
     "bugs": "https://github.com/lialh4qwq/effect-dom/issues",
     "type": "module",
