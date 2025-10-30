@@ -1,6 +1,6 @@
 {
     "name": "@lialh4/effect-dom",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Type-safe DOM manipulation with explicit, composable error handling.",
     "keywords": [
         "typescript",

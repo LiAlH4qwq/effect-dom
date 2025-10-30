@@ -92,3 +92,7 @@ MIT
 ### 0.1.0
 
 First version! :tada:
+
+### 0.1.1
+
+Fix Example in readme.
