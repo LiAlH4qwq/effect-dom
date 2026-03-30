@@ -3,13 +3,13 @@ import { CrossOriginError } from "./Errors"
 
 export const getInnerDoc = (
     iframe: HTMLIFrameElement,
-): Effect.Effect<Document, CrossOriginError> => {
-    const maybeDoc = iframe.contentDocument
-    if (maybeDoc === null)
-        return Effect.fail(
-            new CrossOriginError({
-                iframe,
-            }),
-        )
-    return Effect.succeed(maybeDoc)
-}
+): Effect.Effect<Document, CrossOriginError> =>
+    Effect.sync(() => iframe.contentDocument).pipe(
+        Effect.filterOrFail(
+            maybeDoc => maybeDoc !== null,
+            _ =>
+                new CrossOriginError({
+                    iframe,
+                }),
+        ),
+    )

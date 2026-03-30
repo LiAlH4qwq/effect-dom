@@ -15,6 +15,7 @@ export const elemIs: {
     2,
     <E extends Element>(elem: Element, what: ElemCons<E>): elem is E => {
         if (elem instanceof what) return true
+        if (elem.tagName !== what.name) return false
         const maybeWindowOfElem = elem.ownerDocument.defaultView
         if (maybeWindowOfElem === null) return false
         return (
