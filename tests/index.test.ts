@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test"
 import { Effect, Either } from "effect"
+import { afterEach, describe, expect, test } from "vitest"
 import { getInnerDoc } from "../src/Doc"
 import { elemIs, findElem, findElems } from "../src/Elem"
 import {

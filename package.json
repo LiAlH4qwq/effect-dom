@@ -19,6 +19,9 @@
     "types": "./dist/dts/index.d.ts",
     "module": "./dist/esm/index.js",
     "main": "./dist/cjs/index.js",
+    "engines": {
+        "node": ">=26"
+    },
     "exports": {
         ".": {
             "types": "./dist/dts/index.d.ts",
@@ -44,6 +47,11 @@
             "types": "./dist/dts/Elem.d.ts",
             "import": "./dist/esm/Elem.js",
             "default": "./dist/cjs/Elem.js"
+        },
+        "./Mut": {
+            "types": "./dist/dts/Mut.d.ts",
+            "import": "./dist/esm/Mut.js",
+            "default": "./dist/cjs/Mut.js"
         }
     },
     "files": [
@@ -54,22 +62,24 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^2.2.6",
-        "@happy-dom/global-registrator": "^20.0.4",
-        "@types/bun": "latest"
+        "@types/node": "^26.6.2",
+        "happy-dom": "^20.14.5",
+        "rolldown": "^1.2.9",
+        "rolldown-plugin-dts": "^0.28.6",
+        "typescript": "^5",
+        "vitest": "^5.0.1"
     },
     "peerDependencies": {
         "typescript": "^5"
     },
     "scripts": {
-        "prepublishOnly": "bun run pack",
-        "pack": "bun run check && bun run compile",
-        "check": "bun run check:format && bun run check:lint && bun run check:types",
-        "check:format": "bun run biome format --write",
-        "check:lint": "bun run biome check --write",
-        "check:types": "bun run tsc",
-        "compile": "bun run compile:dts && bun run compile:esm && bun run compile:cjs",
-        "compile:dts": "bun run tsc -b tsconfig-dts.json",
-        "compile:esm": "bun run tsc -b tsconfig-esm.json",
-        "compile:cjs": "bun run tsc -b tsconfig-cjs.json"
+        "build": "rolldown -c",
+        "compile": "pnpm build",
+        "check": "pnpm check:format && pnpm check:lint && pnpm check:types",
+        "check:format": "biome format --write",
+        "check:lint": "biome check --write",
+        "check:types": "tsc",
+        "test": "vitest run",
+        "prepublishOnly": "pnpm check && pnpm build"
     }
 }

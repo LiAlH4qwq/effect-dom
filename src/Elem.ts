@@ -1,4 +1,4 @@
-import { Array, Effect } from "effect"
+import { Array, Effect, Option, Stream } from "effect"
 import type { NonEmptyArray } from "effect/Array"
 import { dual } from "effect/Function"
 import {
@@ -6,6 +6,7 @@ import {
     ElemTypeMismatchError,
     SelSyntaxError,
 } from "./Errors"
+import { mutStream } from "./Mut"
 import type { ElemCons } from "./Types"
 
 export const elemIs: {
@@ -127,3 +128,74 @@ export const findElemsOn =
     <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
     (sel: string) =>
         findElems(on, what, sel)
+
+const elemsIn = (node: Node, sel: string): ReadonlyArray<Element> => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return []
+    const elem = node as Element
+    const self = elem.matches(sel) ? [elem] : []
+    return [...self, ...Array.fromIterable(elem.querySelectorAll(sel))]
+}
+
+const addedElems = (
+    record: MutationRecord,
+    sel: string,
+): ReadonlyArray<Element> =>
+    Array.fromIterable(record.addedNodes).flatMap(node => elemsIn(node, sel))
+
+export const waitElem: {
+    <E extends Element>(
+        what: ElemCons<E>,
+        sel: string,
+    ): (
+        on: Element | Document,
+    ) => Effect.Effect<E, SelSyntaxError | ElemTypeMismatchError>
+    <E extends Element>(
+        on: Element | Document,
+        what: ElemCons<E>,
+        sel: string,
+    ): Effect.Effect<E, SelSyntaxError | ElemTypeMismatchError>
+} = dual(
+    3,
+    <E extends Element>(
+        on: Element | Document,
+        what: ElemCons<E>,
+        sel: string,
+    ) =>
+        findElem(on, what, sel).pipe(
+            Effect.catchTag("ElemNotFoundError", () =>
+                mutStream(on, {
+                    targets: [{ _tag: "Child" }],
+                    deep: true,
+                }).pipe(
+                    Stream.flatMap(record =>
+                        Stream.fromIterable(addedElems(record, sel)),
+                    ),
+                    Stream.mapEffect(elem =>
+                        elemIs(elem, what)
+                            ? Effect.succeed(elem)
+                            : Effect.fail(
+                                  new ElemTypeMismatchError({
+                                      sel,
+                                      expect: what,
+                                      actual: [
+                                          elem.constructor as ElemCons<Element>,
+                                      ],
+                                  }),
+                              ),
+                    ),
+                    Stream.runHead,
+                    Effect.flatMap(
+                        Option.match({
+                            onNone: () => Effect.never,
+                            onSome: Effect.succeed,
+                        }),
+                    ),
+                ),
+            ),
+        ),
+)
+
+export const waitElemOn =
+    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    (sel: string) =>
+        waitElem(on, what, sel)

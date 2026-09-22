@@ -23,5 +23,12 @@
         "target": "esnext",
         "baseUrl": "./",
         "paths": {}
-    }
+    },
+    "include": [
+        "src/**/*",
+        "tests/**/*",
+        "rolldown.config.ts",
+        "vitest.config.ts"
+    ],
+    "exclude": ["node_modules", "dist"]
 }

@@ -48,6 +48,8 @@ const program = findElem(document, HTMLAudioElement, "#player").pipe(
 
 🔗 **Composable** – Chain operations naturally with Effect's pipe and error handling.
 
+👀 **Reactive** – Observe DOM mutations as an Effect `Stream` and wait for elements that don't exist yet.
+
 ⚡ **Zero Runtime Overhead** – Thin wrapper over native DOM APIs.
 
 ## Quick Example
@@ -71,16 +73,39 @@ Effect.runPromise(program).catch(error => {
 })
 ```
 
+## Waiting for elements
+
+`findElem` fails fast when an element isn't there yet. `waitElem` instead waits for it to appear (or returns immediately if it already exists), using a `MutationObserver` under the hood:
+
+```typescript
+import { Effect } from "effect"
+import { waitElem } from "@lialh4/effect-dom/Elem"
+
+// Resolves as soon as an <audio id="player"> is added to the document
+const program = waitElem(document, HTMLAudioElement, "#player").pipe(
+  Effect.andThen(audio => audio.play()),
+  Effect.timeout("5 seconds") // waiting is unbounded by default
+)
+```
+
+The underlying observer is exposed as an Effect `Stream`, so you can react to every mutation:
+
+```typescript
+import { Effect, Stream } from "effect"
+import { mutStream } from "@lialh4/effect-dom/Mut"
+
+const program = mutStream(document.body, {
+  targets: [{ _tag: "Child" }, { _tag: "Attr", withOldVal: true }],
+  deep: true
+}).pipe(
+  Stream.runForEach(record => Effect.log(record.type, record.target))
+)
+```
+
 ## Installation
 
 ```shell
-bun add effect-dom
-```
-
-Or
-
-```shell
-pnpm install effect-dom
+pnpm add @lialh4/effect-dom
 ```
 
 ## License
