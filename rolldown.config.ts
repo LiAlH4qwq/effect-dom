@@ -8,6 +8,8 @@ const input = {
     Doc: "src/Doc.ts",
     Elem: "src/Elem.ts",
     Mut: "src/Mut.ts",
+    Wait: "src/Wait.ts",
+    Interact: "src/Interact.ts",
 }
 
 const external = [/^effect(\/.*)?$/]

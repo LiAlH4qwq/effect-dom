@@ -1,4 +1,7 @@
+export * as Doc from "./Doc"
 export * as Elem from "./Elem"
 export * as Errors from "./Errors"
+export * as Interact from "./Interact"
 export * as Mut from "./Mut"
 export type * as Types from "./Types"
+export * as Wait from "./Wait"

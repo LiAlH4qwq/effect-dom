@@ -1,6 +1,6 @@
 {
     "name": "@lialh4/effect-dom",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "Type-safe DOM manipulation with explicit, composable error handling.",
     "keywords": [
         "typescript",
@@ -52,6 +52,16 @@
             "types": "./dist/dts/Mut.d.ts",
             "import": "./dist/esm/Mut.js",
             "default": "./dist/cjs/Mut.js"
+        },
+        "./Wait": {
+            "types": "./dist/dts/Wait.d.ts",
+            "import": "./dist/esm/Wait.js",
+            "default": "./dist/cjs/Wait.js"
+        },
+        "./Interact": {
+            "types": "./dist/dts/Interact.d.ts",
+            "import": "./dist/esm/Interact.js",
+            "default": "./dist/cjs/Interact.js"
         }
     },
     "files": [

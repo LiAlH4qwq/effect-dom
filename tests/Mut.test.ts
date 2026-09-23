@@ -1,8 +1,8 @@
 import { Array, Effect, Either, Fiber, Stream } from "effect"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { waitElem } from "../src/Elem"
-import { ElemTypeMismatchError, SelSyntaxError } from "../src/Errors"
-import { mutStream } from "../src/Mut"
+import { SelSyntaxError } from "../src/Errors"
+import { mutStream, toMutationObserverInit } from "../src/Mut"
 import type { MutObsOpts } from "../src/Types"
 
 const collectMutations = (target: Node, opts: MutObsOpts, mutate: () => void) =>
@@ -143,28 +143,99 @@ describe("Mut", () => {
             )
         })
 
-        test("type mismatch", async () => {
-            const either = await Effect.runPromise(
-                fork(
-                    waitElem(document, HTMLAudioElement, ".wrong").pipe(
-                        Effect.either,
-                    ),
+        test("ignores added nodes of the wrong type", async () => {
+            const result = await Effect.runPromise(
+                Effect.gen(function* () {
+                    const fiber = yield* Effect.fork(
+                        waitElem(document, HTMLAudioElement, ".mixed"),
+                    )
+                    yield* Effect.sleep("20 millis")
+                    const div = document.createElement("div")
+                    div.classList.add("mixed")
+                    document.body.appendChild(div)
+                    yield* Effect.sleep("20 millis")
+                    const audio = document.createElement("audio")
+                    audio.classList.add("mixed")
+                    document.body.appendChild(audio)
+                    return yield* Fiber.join(fiber)
+                }),
+            )
+            expect(result).toBeInstanceOf(HTMLAudioElement)
+        })
+    })
+
+    describe("selector filtering", () => {
+        test("only emits records touching a match", async () => {
+            const records = await Effect.runPromise(
+                collectMutations(
+                    document.body,
+                    {
+                        targets: [{ _tag: "Child" }],
+                        deep: true,
+                        selector: ".wanted",
+                    },
                     () => {
-                        const div = document.createElement("div")
-                        div.classList.add("wrong")
-                        document.body.appendChild(div)
+                        document.body.appendChild(document.createElement("div"))
+                        const wanted = document.createElement("span")
+                        wanted.classList.add("wanted")
+                        document.body.appendChild(wanted)
                     },
                 ),
             )
-            expect(either).toStrictEqual(
-                Either.left(
-                    new ElemTypeMismatchError({
-                        sel: ".wrong",
-                        expect: HTMLAudioElement,
-                        actual: [HTMLDivElement],
-                    }),
+            expect(records).toHaveLength(1)
+            expect(records[0]!.addedNodes[0]).toBeInstanceOf(HTMLSpanElement)
+        })
+
+        test("restricts attribute observation to names", async () => {
+            const elem = document.createElement("div")
+            document.body.appendChild(elem)
+            const records = await Effect.runPromise(
+                collectMutations(
+                    elem,
+                    {
+                        targets: [{ _tag: "Attr", names: ["data-x"] }],
+                    },
+                    () => {
+                        elem.setAttribute("data-y", "ignored")
+                        elem.setAttribute("data-x", "seen")
+                    },
                 ),
             )
+            expect(records).toHaveLength(1)
+            expect(records[0]!.attributeName).toBe("data-x")
+        })
+    })
+
+    describe("toMutationObserverInit", () => {
+        test("derives observer options from targets", () => {
+            expect(
+                toMutationObserverInit({
+                    targets: [{ _tag: "Child" }],
+                    deep: true,
+                }),
+            ).toStrictEqual({
+                subtree: true,
+                childList: true,
+                attributes: false,
+                characterData: false,
+            })
+
+            expect(
+                toMutationObserverInit({
+                    targets: [
+                        { _tag: "Attr", withOldVal: true, names: ["class"] },
+                        { _tag: "Text", withOldVal: true },
+                    ],
+                }),
+            ).toStrictEqual({
+                subtree: false,
+                childList: false,
+                attributes: true,
+                characterData: true,
+                attributeOldValue: true,
+                characterDataOldValue: true,
+                attributeFilter: ["class"],
+            })
         })
     })
 })

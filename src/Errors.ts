@@ -20,3 +20,8 @@ export class ElemTypeMismatchError extends Data.TaggedError(
 export class CrossOriginError extends Data.TaggedError("CrossOriginError")<{
     iframe: HTMLIFrameElement
 }> {}
+
+export class MediaPlayError extends Data.TaggedError("MediaPlayError")<{
+    media: HTMLMediaElement
+    reason: unknown
+}> {}

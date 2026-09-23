@@ -7,7 +7,7 @@ import {
     SelSyntaxError,
 } from "./Errors"
 import { mutStream } from "./Mut"
-import type { ElemCons } from "./Types"
+import type { ElemCons, QueryRoot } from "./Types"
 
 export const elemIs: {
     <E extends Element>(what: ElemCons<E>): (elem: Element) => elem is E
@@ -26,18 +26,33 @@ export const elemIs: {
     },
 )
 
+const findMatching = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    sel: string,
+): E | null => {
+    const elem = on.querySelector(sel)
+    return elem !== null && elemIs(elem, what) ? elem : null
+}
+
+const queryMatching = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    sel: string,
+): Array<E> => Array.fromIterable(on.querySelectorAll(sel)).filter(elemIs(what))
+
 export const findElem: {
     <E extends Element>(
         what: ElemCons<E>,
         sel: string,
     ): (
-        on: Element | Document,
+        on: QueryRoot,
     ) => Effect.Effect<
         E,
         SelSyntaxError | ElemNotFoundError | ElemTypeMismatchError
     >
     <E extends Element>(
-        on: Element | Document,
+        on: QueryRoot,
         what: ElemCons<E>,
         sel: string,
     ): Effect.Effect<
@@ -46,11 +61,7 @@ export const findElem: {
     >
 } = dual(
     3,
-    <E extends Element>(
-        on: Element | Document,
-        what: ElemCons<E>,
-        sel: string,
-    ) =>
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
         Effect.try({
             try: () => on.querySelector(sel),
             catch: _ => new SelSyntaxError({ sel }),
@@ -71,18 +82,61 @@ export const findElem: {
         ),
 )
 
+/**
+ * Like {@link findElem} but returns `Option.none()` instead of failing when no
+ * matching element exists (or when the selector matches the wrong type).
+ */
+export const findElemOpt: {
+    <E extends Element>(
+        what: ElemCons<E>,
+        sel: string,
+    ): (on: QueryRoot) => Effect.Effect<Option.Option<E>, SelSyntaxError>
+    <E extends Element>(
+        on: QueryRoot,
+        what: ElemCons<E>,
+        sel: string,
+    ): Effect.Effect<Option.Option<E>, SelSyntaxError>
+} = dual(
+    3,
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
+        Effect.try({
+            try: () => findMatching(on, what, sel),
+            catch: _ => new SelSyntaxError({ sel }),
+        }).pipe(Effect.map(Option.fromNullable)),
+)
+
+/**
+ * Tests for the presence of a matching element without ever failing (except on
+ * a malformed selector).
+ */
+export const exists: {
+    <E extends Element>(
+        what: ElemCons<E>,
+        sel: string,
+    ): (on: QueryRoot) => Effect.Effect<boolean, SelSyntaxError>
+    <E extends Element>(
+        on: QueryRoot,
+        what: ElemCons<E>,
+        sel: string,
+    ): Effect.Effect<boolean, SelSyntaxError>
+} = dual(
+    3,
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
+        findElemOpt(on, what, sel).pipe(Effect.map(Option.isSome)),
+)
+
 export const findElems: {
     <E extends Element>(
         what: ElemCons<E>,
         sel: string,
     ): (
-        on: Element | Document,
+        on: QueryRoot,
     ) => Effect.Effect<
         NonEmptyArray<E>,
         SelSyntaxError | ElemNotFoundError | ElemTypeMismatchError
     >
     <E extends Element>(
-        on: Element | Document,
+        on: QueryRoot,
         what: ElemCons<E>,
         sel: string,
     ): Effect.Effect<
@@ -91,11 +145,7 @@ export const findElems: {
     >
 } = dual(
     3,
-    <E extends Element>(
-        on: Element | Document,
-        what: ElemCons<E>,
-        sel: string,
-    ) =>
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
         Effect.try({
             try: () => on.querySelectorAll(sel),
             catch: _ => new SelSyntaxError({ sel }),
@@ -119,15 +169,144 @@ export const findElems: {
         ),
 )
 
+/**
+ * Like {@link findElems} but yields every matching element and never fails on
+ * an empty (or partially mismatched) result. Elements of the wrong type are
+ * skipped, so `[]` is a valid answer.
+ */
+export const findElemsAll: {
+    <E extends Element>(
+        what: ElemCons<E>,
+        sel: string,
+    ): (on: QueryRoot) => Effect.Effect<Array<E>, SelSyntaxError>
+    <E extends Element>(
+        on: QueryRoot,
+        what: ElemCons<E>,
+        sel: string,
+    ): Effect.Effect<Array<E>, SelSyntaxError>
+} = dual(
+    3,
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
+        Effect.try({
+            try: () => queryMatching(on, what, sel),
+            catch: _ => new SelSyntaxError({ sel }),
+        }),
+)
+
+export interface FindByTextOpts {
+    readonly exact?: boolean
+}
+
+const textMatches = (elem: Element, text: string, exact: boolean): boolean => {
+    const content = (elem.textContent ?? "").trim()
+    return exact ? content === text : content.includes(text)
+}
+
+const findByTextCandidate = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    text: string,
+    exact: boolean,
+): E | null =>
+    Array.fromIterable(on.querySelectorAll("*"))
+        .filter(elemIs(what))
+        .find(elem => textMatches(elem, text, exact)) ?? null
+
+/**
+ * Finds the first element of the requested type whose (trimmed) text contains
+ * `text` — or equals it when `{ exact: true }` is passed.
+ */
+export const findByText = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    text: string,
+    opts: FindByTextOpts = {},
+): Effect.Effect<E, SelSyntaxError | ElemNotFoundError> =>
+    Effect.try({
+        try: () => findByTextCandidate(on, what, text, opts.exact ?? false),
+        catch: _ => new SelSyntaxError({ sel: text }),
+    }).pipe(
+        Effect.flatMap(candidate =>
+            candidate === null
+                ? Effect.fail(new ElemNotFoundError({ sel: text }))
+                : Effect.succeed(candidate),
+        ),
+    )
+
+export const findByTextOpt = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    text: string,
+    opts: FindByTextOpts = {},
+): Effect.Effect<Option.Option<E>, SelSyntaxError> =>
+    Effect.try({
+        try: () => findByTextCandidate(on, what, text, opts.exact ?? false),
+        catch: _ => new SelSyntaxError({ sel: text }),
+    }).pipe(Effect.map(Option.fromNullable))
+
+export const getText = (elem: Element): Effect.Effect<string> =>
+    Effect.sync(() => elem.textContent ?? "")
+
+export const getAttr = (
+    elem: Element,
+    name: string,
+): Effect.Effect<Option.Option<string>> =>
+    Effect.sync(() => Option.fromNullable(elem.getAttribute(name)))
+
+export const getProp = <E extends Element, K extends keyof E>(
+    elem: E,
+    key: K,
+): Effect.Effect<E[K]> => Effect.sync(() => elem[key])
+
+export const hasAttr = (elem: Element, name: string): Effect.Effect<boolean> =>
+    Effect.sync(() => elem.hasAttribute(name))
+
+export const hasClass = (
+    elem: Element,
+    className: string,
+): Effect.Effect<boolean> =>
+    Effect.sync(() => elem.classList.contains(className))
+
+/**
+ * Builds a selector that only matches direct children of the query root.
+ * `findElem(root, Div, child(".item"))` behaves like `root.querySelector(":scope > .item")`.
+ */
+export const child = (sel: string): string => `:scope > ${sel}`
+
 export const findElemOn =
-    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
     (sel: string) =>
         findElem(on, what, sel)
 
 export const findElemsOn =
-    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
     (sel: string) =>
         findElems(on, what, sel)
+
+export const findElemOptOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (sel: string) =>
+        findElemOpt(on, what, sel)
+
+export const existsOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (sel: string) =>
+        exists(on, what, sel)
+
+export const findElemsAllOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (sel: string) =>
+        findElemsAll(on, what, sel)
+
+export const findByTextOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (text: string, opts?: FindByTextOpts) =>
+        findByText(on, what, text, opts)
+
+export const findByTextOptOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (text: string, opts?: FindByTextOpts) =>
+        findByTextOpt(on, what, text, opts)
 
 const elemsIn = (node: Node, sel: string): ReadonlyArray<Element> => {
     if (node.nodeType !== Node.ELEMENT_NODE) return []
@@ -142,60 +321,173 @@ const addedElems = (
 ): ReadonlyArray<Element> =>
     Array.fromIterable(record.addedNodes).flatMap(node => elemsIn(node, sel))
 
+const observeAddedElem = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    sel: string,
+): Effect.Effect<E, SelSyntaxError> =>
+    mutStream(on as Node, {
+        targets: [{ _tag: "Child" }],
+        deep: true,
+    }).pipe(
+        Stream.flatMap(record => Stream.fromIterable(addedElems(record, sel))),
+        Stream.filterMap(elem =>
+            elemIs(elem, what) ? Option.some(elem) : Option.none(),
+        ),
+        Stream.runHead,
+        Effect.flatMap(
+            Option.match({
+                onNone: () => Effect.never,
+                onSome: Effect.succeed,
+            }),
+        ),
+    )
+
+/**
+ * Waits for a typed element to appear. It resolves immediately when one already
+ * exists, otherwise it observes child-list mutations. Added nodes of the wrong
+ * type are ignored rather than failing the wait, which makes polymorphic
+ * selectors safe.
+ *
+ * Waiting is unbounded; compose with `Effect.timeout` (or `Effect.timeoutFail`
+ * for a typed timeout error) to bound it.
+ */
 export const waitElem: {
     <E extends Element>(
         what: ElemCons<E>,
         sel: string,
-    ): (
-        on: Element | Document,
-    ) => Effect.Effect<E, SelSyntaxError | ElemTypeMismatchError>
+    ): (on: QueryRoot) => Effect.Effect<E, SelSyntaxError>
     <E extends Element>(
-        on: Element | Document,
+        on: QueryRoot,
         what: ElemCons<E>,
         sel: string,
-    ): Effect.Effect<E, SelSyntaxError | ElemTypeMismatchError>
+    ): Effect.Effect<E, SelSyntaxError>
 } = dual(
     3,
-    <E extends Element>(
-        on: Element | Document,
-        what: ElemCons<E>,
-        sel: string,
-    ) =>
-        findElem(on, what, sel).pipe(
-            Effect.catchTag("ElemNotFoundError", () =>
-                mutStream(on, {
-                    targets: [{ _tag: "Child" }],
-                    deep: true,
-                }).pipe(
-                    Stream.flatMap(record =>
-                        Stream.fromIterable(addedElems(record, sel)),
-                    ),
-                    Stream.mapEffect(elem =>
-                        elemIs(elem, what)
-                            ? Effect.succeed(elem)
-                            : Effect.fail(
-                                  new ElemTypeMismatchError({
-                                      sel,
-                                      expect: what,
-                                      actual: [
-                                          elem.constructor as ElemCons<Element>,
-                                      ],
-                                  }),
-                              ),
-                    ),
-                    Stream.runHead,
-                    Effect.flatMap(
-                        Option.match({
-                            onNone: () => Effect.never,
-                            onSome: Effect.succeed,
-                        }),
-                    ),
-                ),
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
+        Effect.try({
+            try: () => findMatching(on, what, sel),
+            catch: _ => new SelSyntaxError({ sel }),
+        }).pipe(
+            Effect.flatMap(maybe =>
+                maybe !== null
+                    ? Effect.succeed(maybe)
+                    : observeAddedElem(on, what, sel),
             ),
         ),
 )
 
+const observeNewElems = <E extends Element>(
+    on: QueryRoot,
+    what: ElemCons<E>,
+    sel: string,
+): Effect.Effect<NonEmptyArray<E>, SelSyntaxError> =>
+    mutStream(on as Node, {
+        targets: [{ _tag: "Child" }],
+        deep: true,
+    }).pipe(
+        Stream.map(() => queryMatching(on, what, sel)),
+        Stream.filter(Array.isNonEmptyArray),
+        Stream.runHead,
+        Effect.flatMap(
+            Option.match({
+                onNone: () => Effect.never,
+                onSome: Effect.succeed,
+            }),
+        ),
+    )
+
+/**
+ * Waits until at least one matching element exists and returns all of them.
+ * Unbounded like {@link waitElem}; compose with `Effect.timeout`.
+ */
+export const waitElems: {
+    <E extends Element>(
+        what: ElemCons<E>,
+        sel: string,
+    ): (on: QueryRoot) => Effect.Effect<NonEmptyArray<E>, SelSyntaxError>
+    <E extends Element>(
+        on: QueryRoot,
+        what: ElemCons<E>,
+        sel: string,
+    ): Effect.Effect<NonEmptyArray<E>, SelSyntaxError>
+} = dual(
+    3,
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>, sel: string) =>
+        Effect.try({
+            try: () => queryMatching(on, what, sel),
+            catch: _ => new SelSyntaxError({ sel }),
+        }).pipe(
+            Effect.flatMap(elems =>
+                Array.isNonEmptyArray(elems)
+                    ? Effect.succeed(elems)
+                    : observeNewElems(on, what, sel),
+            ),
+        ),
+)
+
+const notPresent = (
+    on: QueryRoot,
+    sel: string,
+    what?: ElemCons<Element>,
+): boolean =>
+    what === undefined
+        ? on.querySelector(sel) === null
+        : Array.fromIterable(on.querySelectorAll(sel)).every(
+              elem => !elemIs(elem, what),
+          )
+
+const observeGone = (
+    on: QueryRoot,
+    sel: string,
+    what?: ElemCons<Element>,
+): Effect.Effect<void, SelSyntaxError> =>
+    mutStream(on as Node, {
+        targets: [{ _tag: "Child" }, { _tag: "Attr" }],
+        deep: true,
+    }).pipe(
+        Stream.filter(() => notPresent(on, sel, what)),
+        Stream.runHead,
+        Effect.asVoid,
+    )
+
+/**
+ * Waits until nothing matching `sel` (and optionally `what`) remains under
+ * `on`. Attribute changes are observed too, so an element that stops matching
+ * because a class was removed counts as gone. Unbounded; compose with
+ * `Effect.timeout`.
+ */
+export const waitElemGone = (
+    on: QueryRoot,
+    sel: string,
+    what?: ElemCons<Element>,
+): Effect.Effect<void, SelSyntaxError> =>
+    Effect.try({
+        try: () => notPresent(on, sel, what),
+        catch: _ => new SelSyntaxError({ sel }),
+    }).pipe(
+        Effect.flatMap(gone =>
+            gone ? Effect.void : observeGone(on, sel, what),
+        ),
+    )
+
+/**
+ * Alias for {@link waitElemGone}.
+ */
+export const waitDetached = waitElemGone
+
 export const waitElemOn =
-    <E extends Element>(on: Element | Document, what: ElemCons<E>) =>
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
     (sel: string) =>
         waitElem(on, what, sel)
+
+export const waitElemsOn =
+    <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
+    (sel: string) =>
+        waitElems(on, what, sel)
+
+export const waitElemGoneOn =
+    (on: QueryRoot) => (sel: string, what?: ElemCons<Element>) =>
+        waitElemGone(on, sel, what)
+
+export const waitDetachedOn = waitElemGoneOn

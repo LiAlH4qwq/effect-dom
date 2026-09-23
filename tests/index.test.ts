@@ -1,6 +1,6 @@
 import { Effect, Either } from "effect"
 import { afterEach, describe, expect, test } from "vitest"
-import { getInnerDoc } from "../src/Doc"
+import { getInnerDoc, waitInnerDoc } from "../src/Doc"
 import { elemIs, findElem, findElems } from "../src/Elem"
 import {
     ElemNotFoundError,
@@ -21,6 +21,15 @@ describe("test", () => {
                 expect(
                     getInnerDoc(ifr).pipe(Effect.either, Effect.runSync),
                 ).toStrictEqual(Either.right(ifr.contentDocument!))
+            })
+        })
+        describe("waitInnerDoc", () => {
+            test("resolves an already-loaded frame", async () => {
+                const ifr = document.createElement("iframe")
+                ifr.src = "about:blank"
+                document.body.appendChild(ifr)
+                const doc = await Effect.runPromise(waitInnerDoc(ifr))
+                expect(doc).toBe(ifr.contentDocument!)
             })
         })
     })
