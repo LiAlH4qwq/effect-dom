@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 result
 .direnv/
+.npmrc
