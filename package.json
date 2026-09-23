@@ -62,6 +62,11 @@
             "types": "./dist/dts/Interact.d.ts",
             "import": "./dist/esm/Interact.js",
             "default": "./dist/cjs/Interact.js"
+        },
+        "./Media": {
+            "types": "./dist/dts/Media.d.ts",
+            "import": "./dist/esm/Media.js",
+            "default": "./dist/cjs/Media.js"
         }
     },
     "files": [
@@ -85,7 +90,8 @@
     "scripts": {
         "build": "rolldown -c",
         "compile": "pnpm build",
-        "check": "pnpm check:format && pnpm check:lint && pnpm check:types",
+        "check": "pnpm check:functional && pnpm check:format && pnpm check:lint && pnpm check:types",
+        "check:functional": "node scripts/audit-functional.mjs",
         "check:format": "biome format --write",
         "check:lint": "biome check --write",
         "check:types": "tsc",

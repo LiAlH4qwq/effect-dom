@@ -69,9 +69,7 @@ export const mutStream = (
             Effect.acquireRelease(
                 Effect.sync(() => {
                     const observer = new MutationObserver(records => {
-                        Array.fromIterable(records).forEach(record => {
-                            emit.single(record)
-                        })
+                        emit.array(Array.fromIterable(records))
                     })
                     observer.observe(target, toMutationObserverInit(opts))
                     return observer

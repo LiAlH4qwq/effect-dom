@@ -44,11 +44,45 @@ export const waitFor = (
         opts,
     ).pipe(Effect.asVoid)
 
+/**
+ * Value-returning sibling of `waitFor`: repeatedly evaluates `compute` until it
+ * yields `Some`, then resolves with that value. Use it to wait for
+ * client-rendered data without sleep-guessing.
+ */
+export const until = <A>(
+    compute: () => Option.Option<A>,
+    opts?: WaitOpts,
+): Effect.Effect<A> => waitForOption(compute, opts)
+
+/**
+ * Resolves with the value of `compute` once it has not changed for `quiet`.
+ * Useful to wait out a list that is still rendering: the stream of samples is
+ * de-duplicated with `eq` and only emitted after a quiet period.
+ */
+export const waitStable = <A>(
+    compute: () => A,
+    eq: (previous: A, next: A) => boolean,
+    quiet: DurationInput,
+    opts?: WaitOpts,
+): Effect.Effect<A> =>
+    Stream.tick(intervalOf(opts)).pipe(
+        Stream.map(compute),
+        Stream.changesWith(eq),
+        Stream.debounce(quiet),
+        Stream.runHead,
+        Effect.flatMap(
+            Option.match({
+                onNone: () => Effect.never,
+                onSome: Effect.succeed,
+            }),
+        ),
+    )
+
 const observeFirst = (
     on: QueryRoot,
     sel: string,
 ): Effect.Effect<Element, SelSyntaxError> =>
-    mutStream(on as Node, {
+    mutStream(on, {
         targets: [{ _tag: "Child" }],
         deep: true,
     }).pipe(
@@ -105,13 +139,15 @@ export interface WaitAttrOpts extends WaitOpts {
     readonly equals?: string
 }
 
-const attrMatches = (
+const attrValue = (
     elem: Element,
     name: string,
     equals: string | undefined,
-): boolean => {
+): Option.Option<string> => {
     const value = elem.getAttribute(name)
     return value !== null && (equals === undefined || value === equals)
+        ? Option.some(value)
+        : Option.none()
 }
 
 /**
@@ -124,12 +160,11 @@ export const waitAttr = (
     name: string,
     opts: WaitAttrOpts = {},
 ): Effect.Effect<string, SelSyntaxError> =>
-    pollElement(
-        on,
-        sel,
-        elem => attrMatches(elem, name, opts.equals),
-        opts,
-    ).pipe(Effect.map(elem => elem.getAttribute(name)!))
+    waitForElement(on, sel).pipe(
+        Effect.flatMap(elem =>
+            waitForOption(() => attrValue(elem, name, opts.equals), opts),
+        ),
+    )
 
 /**
  * Waits until `elem[sel]` has the given class and resolves with the element.
@@ -148,7 +183,7 @@ export const waitClass = (
  * {@link waitInView}.
  */
 export const isVisible = (elem: Element): boolean => {
-    if (!elem.isConnected || (elem as HTMLElement).hidden) return false
+    if (!elem.isConnected || elem.hasAttribute("hidden")) return false
     const view = elem.ownerDocument.defaultView
     if (view === null) return true
     const style = view.getComputedStyle(elem)
@@ -184,7 +219,60 @@ export const waitEnabled = (
 ): Effect.Effect<Element, SelSyntaxError> =>
     pollElement(on, sel, elem => !isDisabled(elem), opts)
 
-export const mediaEnded = (media: HTMLMediaElement): boolean =>
+export interface ActionableOpts {
+    /** Require the element to be visible. Defaults to `true`. */
+    readonly visible?: boolean
+    /** Require the element to be enabled. Defaults to `true`. */
+    readonly enabled?: boolean
+    /** Require the element to be the top-most element at its centre. Defaults to `true`. */
+    readonly uncovered?: boolean
+}
+
+const isCovered = (elem: Element): boolean => {
+    const rect = elem.getBoundingClientRect()
+    if (rect.width === 0 && rect.height === 0) return true
+    const doc = elem.ownerDocument
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
+    const top = doc.elementFromPoint(x, y)
+    return (
+        top !== null &&
+        top !== elem &&
+        !elem.contains(top) &&
+        !top.contains(elem)
+    )
+}
+
+/**
+ * Reports whether an element is actionably interactable right now: visible,
+ * enabled, and (by default) not covered by another element at its centre.
+ * Unlike {@link isVisible} this can only be trusted in a real layout, since it
+ * consults `getBoundingClientRect`/`elementFromPoint`.
+ */
+export const isActionable = (
+    elem: Element,
+    opts: ActionableOpts = {},
+): boolean => {
+    const checks: ReadonlyArray<boolean> = [
+        !(opts.visible ?? true) || isVisible(elem),
+        !(opts.enabled ?? true) || !isDisabled(elem),
+        !(opts.uncovered ?? true) || !isCovered(elem),
+    ]
+    return checks.every(Boolean)
+}
+
+/**
+ * Waits until `elem[sel]` is actionable, resolving with the element. Handy
+ * before clicking a control that may be hidden, disabled or overlaid.
+ */
+export const waitActionable = (
+    on: QueryRoot,
+    sel: string,
+    opts: WaitOpts & ActionableOpts = {},
+): Effect.Effect<Element, SelSyntaxError> =>
+    pollElement(on, sel, elem => isActionable(elem, opts), opts)
+
+export const isMediaEnded = (media: HTMLMediaElement): boolean =>
     media.ended ||
     (Number.isFinite(media.duration) &&
         media.duration > 0 &&
@@ -197,7 +285,7 @@ export const mediaEnded = (media: HTMLMediaElement): boolean =>
 export const waitMediaEnded = (
     media: HTMLMediaElement,
     opts: WaitOpts = {},
-): Effect.Effect<void> => waitFor(() => mediaEnded(media), opts)
+): Effect.Effect<void> => waitFor(() => isMediaEnded(media), opts)
 
 /**
  * Waits for a single DOM event on `target` and resolves with it. The listener

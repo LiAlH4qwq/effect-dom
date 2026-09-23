@@ -1,5 +1,6 @@
 import { Array, Effect } from "effect"
 import { MediaPlayError } from "./Errors"
+import { type ActionableOpts, isActionable } from "./Wait"
 
 export type ValueControl =
     | HTMLInputElement
@@ -35,6 +36,21 @@ export const dispatch = (
     target: EventTarget,
     event: Event,
 ): Effect.Effect<boolean> => Effect.sync(() => target.dispatchEvent(event))
+
+/**
+ * Clicks `elem` only when it is actionable (see `Wait.isActionable`), resolving
+ * with `true` when clicked and `false` when it was skipped. Never waits — pair
+ * it with `Wait.waitActionable` when the element may appear or change later.
+ */
+export const clickIfActionable = (
+    elem: Element,
+    opts?: ActionableOpts,
+): Effect.Effect<boolean> =>
+    Effect.suspend(() =>
+        isActionable(elem, opts)
+            ? click(elem).pipe(Effect.as(true))
+            : Effect.succeed(false),
+    )
 
 const setNativeValue = (control: ValueControl, value: string): void => {
     const descriptor = Object.getOwnPropertyDescriptor(
@@ -242,3 +258,8 @@ export const setVolume = (
     volume: number,
 ): Effect.Effect<void> =>
     Effect.sync(() => (media.volume = Math.min(1, Math.max(0, volume))))
+
+export const setPlaybackRate = (
+    media: HTMLMediaElement,
+    rate: number,
+): Effect.Effect<void> => Effect.sync(() => (media.playbackRate = rate))

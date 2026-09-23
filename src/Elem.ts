@@ -7,22 +7,30 @@ import {
     SelSyntaxError,
 } from "./Errors"
 import { mutStream } from "./Mut"
-import type { ElemCons, QueryRoot } from "./Types"
+import type { AttrChange, ElemCons, QueryRoot } from "./Types"
 
-export const elemIs: {
+const realmCtor = (
+    view: Window,
+    what: ElemCons<Element>,
+): (new () => Element) | null => {
+    const ctor: unknown = Reflect.get(view, what.name)
+    return typeof ctor === "function" ? (ctor as new () => Element) : null
+}
+
+export const isElem: {
     <E extends Element>(what: ElemCons<E>): (elem: Element) => elem is E
     <E extends Element>(elem: Element, what: ElemCons<E>): elem is E
 } = dual(
     2,
     <E extends Element>(elem: Element, what: ElemCons<E>): elem is E => {
+        // Same realm: a direct `instanceof` is authoritative.
         if (elem instanceof what) return true
-        if (elem.tagName !== what.name) return false
-        const maybeWindowOfElem = elem.ownerDocument.defaultView
-        if (maybeWindowOfElem === null) return false
-        return (
-            elem instanceof
-            maybeWindowOfElem[what.name as keyof typeof maybeWindowOfElem]
-        )
+        // Isolated worlds / subframes expose different constructors, so resolve
+        // the constructor by name from the element's own realm and re-check.
+        const view = elem.ownerDocument.defaultView
+        if (view === null) return false
+        const ctor = realmCtor(view, what)
+        return ctor !== null && elem instanceof ctor
     },
 )
 
@@ -32,14 +40,14 @@ const findMatching = <E extends Element>(
     sel: string,
 ): E | null => {
     const elem = on.querySelector(sel)
-    return elem !== null && elemIs(elem, what) ? elem : null
+    return elem !== null && isElem(elem, what) ? elem : null
 }
 
 const queryMatching = <E extends Element>(
     on: QueryRoot,
     what: ElemCons<E>,
     sel: string,
-): Array<E> => Array.fromIterable(on.querySelectorAll(sel)).filter(elemIs(what))
+): Array<E> => Array.fromIterable(on.querySelectorAll(sel)).filter(isElem(what))
 
 export const findElem: {
     <E extends Element>(
@@ -71,7 +79,7 @@ export const findElem: {
                 _ => new ElemNotFoundError({ sel }),
             ),
             Effect.filterOrFail(
-                elem => elemIs(elem, what),
+                elem => isElem(elem, what),
                 elem =>
                     new ElemTypeMismatchError({
                         sel,
@@ -109,7 +117,7 @@ export const findElemOpt: {
  * Tests for the presence of a matching element without ever failing (except on
  * a malformed selector).
  */
-export const exists: {
+export const isElemExists: {
     <E extends Element>(
         what: ElemCons<E>,
         sel: string,
@@ -156,7 +164,7 @@ export const findElems: {
             ),
             Effect.map(Array.fromIterable),
             Effect.filterOrFail(
-                Array.every(elemIs(what)),
+                Array.every(isElem(what)),
                 elems =>
                     new ElemTypeMismatchError({
                         sel,
@@ -209,7 +217,7 @@ const findByTextCandidate = <E extends Element>(
     exact: boolean,
 ): E | null =>
     Array.fromIterable(on.querySelectorAll("*"))
-        .filter(elemIs(what))
+        .filter(isElem(what))
         .find(elem => textMatches(elem, text, exact)) ?? null
 
 /**
@@ -288,10 +296,10 @@ export const findElemOptOn =
     (sel: string) =>
         findElemOpt(on, what, sel)
 
-export const existsOn =
+export const isElemExistsOn =
     <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
     (sel: string) =>
-        exists(on, what, sel)
+        isElemExists(on, what, sel)
 
 export const findElemsAllOn =
     <E extends Element>(on: QueryRoot, what: ElemCons<E>) =>
@@ -308,9 +316,12 @@ export const findByTextOptOn =
     (text: string, opts?: FindByTextOpts) =>
         findByTextOpt(on, what, text, opts)
 
+const asElement = (node: Node): Element | null =>
+    node.nodeType === Node.ELEMENT_NODE ? (node as Element) : null
+
 const elemsIn = (node: Node, sel: string): ReadonlyArray<Element> => {
-    if (node.nodeType !== Node.ELEMENT_NODE) return []
-    const elem = node as Element
+    const elem = asElement(node)
+    if (elem === null) return []
     const self = elem.matches(sel) ? [elem] : []
     return [...self, ...Array.fromIterable(elem.querySelectorAll(sel))]
 }
@@ -321,18 +332,83 @@ const addedElems = (
 ): ReadonlyArray<Element> =>
     Array.fromIterable(record.addedNodes).flatMap(node => elemsIn(node, sel))
 
+const removedElems = (
+    record: MutationRecord,
+    sel: string,
+): ReadonlyArray<Element> =>
+    Array.fromIterable(record.removedNodes).flatMap(node => elemsIn(node, sel))
+
+const childStream = (
+    on: QueryRoot,
+    sel: string,
+    elemsOf: (record: MutationRecord, sel: string) => ReadonlyArray<Element>,
+): Stream.Stream<Element> =>
+    mutStream(on, {
+        targets: [{ _tag: "Child" }],
+        deep: true,
+    }).pipe(Stream.flatMap(record => Stream.fromIterable(elemsOf(record, sel))))
+
+/**
+ * Emits every element that starts matching `sel` (the added node itself, or a
+ * descendant of it). Never ends; compose with `Stream.take`, `Stream.debounce`,
+ * etc.
+ */
+export const addedStream: {
+    (sel: string): (on: QueryRoot) => Stream.Stream<Element>
+    (on: QueryRoot, sel: string): Stream.Stream<Element>
+} = dual(2, (on: QueryRoot, sel: string) => childStream(on, sel, addedElems))
+
+/**
+ * Emits every element that stops matching `sel`.
+ */
+export const removedStream: {
+    (sel: string): (on: QueryRoot) => Stream.Stream<Element>
+    (on: QueryRoot, sel: string): Stream.Stream<Element>
+} = dual(2, (on: QueryRoot, sel: string) => childStream(on, sel, removedElems))
+
+/**
+ * Emits a record for every change of the attribute `name` on elements matching
+ * `sel`.
+ */
+export const attrStream: {
+    (sel: string, name: string): (on: QueryRoot) => Stream.Stream<AttrChange>
+    (on: QueryRoot, sel: string, name: string): Stream.Stream<AttrChange>
+} = dual(3, (on: QueryRoot, sel: string, name: string) =>
+    mutStream(on, {
+        targets: [{ _tag: "Attr", names: [name], withOldVal: true }],
+        deep: true,
+    }).pipe(
+        Stream.filterMap(record => {
+            const target = asElement(record.target)
+            if (
+                record.attributeName !== name ||
+                target === null ||
+                !target.matches(sel)
+            ) {
+                return Option.none()
+            }
+            return Option.some({
+                target,
+                name,
+                value: target.getAttribute(name),
+                oldValue: record.oldValue,
+            })
+        }),
+    ),
+)
+
 const observeAddedElem = <E extends Element>(
     on: QueryRoot,
     what: ElemCons<E>,
     sel: string,
 ): Effect.Effect<E, SelSyntaxError> =>
-    mutStream(on as Node, {
+    mutStream(on, {
         targets: [{ _tag: "Child" }],
         deep: true,
     }).pipe(
         Stream.flatMap(record => Stream.fromIterable(addedElems(record, sel))),
         Stream.filterMap(elem =>
-            elemIs(elem, what) ? Option.some(elem) : Option.none(),
+            isElem(elem, what) ? Option.some(elem) : Option.none(),
         ),
         Stream.runHead,
         Effect.flatMap(
@@ -382,7 +458,7 @@ const observeNewElems = <E extends Element>(
     what: ElemCons<E>,
     sel: string,
 ): Effect.Effect<NonEmptyArray<E>, SelSyntaxError> =>
-    mutStream(on as Node, {
+    mutStream(on, {
         targets: [{ _tag: "Child" }],
         deep: true,
     }).pipe(
@@ -434,7 +510,7 @@ const notPresent = (
     what === undefined
         ? on.querySelector(sel) === null
         : Array.fromIterable(on.querySelectorAll(sel)).every(
-              elem => !elemIs(elem, what),
+              elem => !isElem(elem, what),
           )
 
 const observeGone = (
@@ -442,7 +518,7 @@ const observeGone = (
     sel: string,
     what?: ElemCons<Element>,
 ): Effect.Effect<void, SelSyntaxError> =>
-    mutStream(on as Node, {
+    mutStream(on, {
         targets: [{ _tag: "Child" }, { _tag: "Attr" }],
         deep: true,
     }).pipe(
@@ -491,3 +567,12 @@ export const waitElemGoneOn =
         waitElemGone(on, sel, what)
 
 export const waitDetachedOn = waitElemGoneOn
+
+export const addedStreamOn = (on: QueryRoot) => (sel: string) =>
+    addedStream(on, sel)
+
+export const removedStreamOn = (on: QueryRoot) => (sel: string) =>
+    removedStream(on, sel)
+
+export const attrStreamOn = (on: QueryRoot) => (sel: string, name: string) =>
+    attrStream(on, sel, name)

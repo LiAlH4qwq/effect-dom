@@ -1,5 +1,7 @@
 # Effect Dom
 
+**Languages:** [English](./README.md) · [简体中文](./README.CN.md) · [Documentation](./docs/en/README.md)
+
 **Type-safe, reactive DOM automation — built for browser extensions.**
 
 Does `querySelector` return `null`? Are type assertions guesswork? Are your `setInterval`s leaking? Effect Dom turns every DOM operation into a composable, timeout-able, interruptible `Effect`: failures live in the types, waiting is event-driven, and cleanup is handled by the runtime.
@@ -98,7 +100,7 @@ await Effect.runPromise(setValue(email, "me@example.com"))
 
 ### Cross-origin, iframes and Shadow DOM are not special cases
 
-A query root (`QueryRoot`) accepts any `ParentNode` — `Element`, `Document`, `DocumentFragment` and `ShadowRoot` alike. For iframes there is `waitInnerDoc`, which waits for the frame to finish loading before reading its document:
+A query root (`QueryRoot`) is `Element | Document | DocumentFragment` — and therefore `ShadowRoot` — so shadow-DOM components work unchanged. For iframes there is `waitInnerDoc`, which waits for the frame to finish loading before reading its document:
 
 ```ts
 findElem(document, HTMLIFrameElement, "#player-frame").pipe(
@@ -205,11 +207,92 @@ yield* click(confirm)
 ### 7. Optional queries that don't treat "not found" as an error
 
 ```ts
-import { exists, findElemOpt, findElemsAll } from "@lialh4/effect-dom/Elem"
+import { isElemExists, findElemOpt, findElemsAll } from "@lialh4/effect-dom/Elem"
 
 const maybeBanner = yield* findElemOpt(document, HTMLElement, ".cookie-banner")
-const hasBanner = yield* exists(document, HTMLElement, ".cookie-banner")
+const hasBanner = yield* isElemExists(document, HTMLElement, ".cookie-banner")
 const rows = yield* findElemsAll(document, HTMLTableRowElement, "table tr") // [] is fine
+```
+
+### 8. Supervise a Video.js player
+
+```ts
+import {
+  finishMedia,
+  endedWithin,
+  keepPlaying,
+  waitCanPlay,
+  watchStall,
+} from "@lialh4/effect-dom/Media"
+
+// element exists != playable: with preload="none" readyState stays at 0
+yield* waitCanPlay(video, { interval: "100 millis" })
+
+// apps reset muted/resume behind your back; keepPlaying re-applies every tick
+// and watchStall fails the whole group the moment playback hangs
+yield* Effect.all(
+  [keepPlaying(video, { muted: true, playbackRate: 1.5 }), watchStall(video)],
+  { concurrency: "unbounded" },
+)
+
+// streams that stop ~2s short of duration never fire `ended`
+yield* endedWithin(video, 2)
+yield* finishMedia(video) // seek to duration to force ended/complete
+```
+
+### 9. Wait for data, not just elements
+
+```ts
+import { until, waitStable } from "@lialh4/effect-dom/Wait"
+
+// resolve with the first `Some`, no boolean-then-read dance
+const firstRow = yield* until(() =>
+  Option.fromNullable(document.querySelector(".row")),
+)
+
+// wait until a client-rendered list has actually settled
+const rowCount = yield* waitStable(
+  () => document.querySelectorAll(".row").length,
+  (previous, next) => previous === next,
+  "300 millis",
+)
+```
+
+### 10. Only click when it is actually clickable
+
+```ts
+import { clickIfActionable } from "@lialh4/effect-dom/Interact"
+import { waitActionable } from "@lialh4/effect-dom/Wait"
+
+// visible + enabled + not covered by another element
+const playButton = yield* waitActionable(document, ".vjs-big-play-button")
+yield* clickIfActionable(playButton)
+```
+
+### 11. Stream additions, removals and attributes
+
+```ts
+import { addedStream, attrStream, removedStream } from "@lialh4/effect-dom/Elem"
+import { Stream } from "effect"
+
+yield* removedStream(document, ".row").pipe(
+  Stream.take(1),
+  Stream.runDrain,
+)
+yield* attrStream(document, "video.vjs-tech", "class").pipe(
+  Stream.tap(change => Effect.log(change.oldValue, "->", change.value)),
+  Stream.runDrain,
+)
+```
+
+### 12. Realm-safe typed matching
+
+`isElem` first tries `instanceof`, then resolves the constructor by name from the element's **own** realm — so isolated-world content scripts and subframes match correctly:
+
+```ts
+// works even though HTMLVideoElement here is from another realm
+const frameDoc = yield* waitInnerDoc(frame)
+yield* findElem(frameDoc, HTMLVideoElement, "video")
 ```
 
 ---
@@ -221,21 +304,31 @@ const rows = yield* findElemsAll(document, HTMLTableRowElement, "table tr") // [
 - 🔗 **Composable** — chain with `pipe` and let errors propagate through the types.
 - 👀 **Reactive** — raw mutations as a `Stream`; wait for elements, attributes, visibility and media state.
 - 🖱️ **Interactive** — click, type, check, press keys, scroll and drive media, all as `Effect`s.
+- 🎬 **Media-aware** — readiness, stall detection, tolerant end, force-finish and a keep-playing supervisor.
+- 🎯 **Actionable** — wait for, and click, only truly interactable elements.
 - 🧩 **Framework-friendly** — native setters plus events, so controlled components respond.
 - 🪶 **Zero runtime overhead** — a thin wrapper over native DOM; no mutable state, no loops, no exceptions.
 
 ## Modules and API
 
-| Module     | Purpose                   | Key API                                                                                                                          |
-| ---------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `Elem`     | Query, wait and read      | `findElem` `findElemOpt` `exists` `findElemsAll` `findByText` `waitElem` `waitElems` `waitElemGone` `getText` `getAttr` `child` |
-| `Wait`     | Wait for state            | `waitFor` `waitAttr` `waitClass` `waitVisible` `waitEnabled` `waitMediaEnded` `waitEvent` `waitAny` `waitInView`                 |
-| `Interact` | Interact with elements    | `click` `setValue` `check` `press` `type` `scrollIntoView` `hover` `play` `safePlay` `seek` …                                   |
-| `Mut`      | Observe mutation streams  | `mutStream` (with `selector` / `debounce` / `attributeFilter`)                                                                   |
-| `Doc`      | Iframe documents          | `getInnerDoc` `waitInnerDoc`                                                                                                     |
-| `Errors`   | Typed errors              | `SelSyntaxError` `ElemNotFoundError` `ElemTypeMismatchError` `CrossOriginError` `MediaPlayError`                               |
+| Module     | Purpose                   | Key API                                                                                                                            |
+| ---------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `Elem`     | Query, wait, stream, read | `findElem` `findElemOpt` `isElemExists` `findElemsAll` `findByText` `waitElem` `waitElems` `waitElemGone` `addedStream` `attrStream`     |
+| `Wait`     | Wait for state            | `waitFor` `until` `waitStable` `waitAttr` `waitClass` `waitVisible` `waitActionable` `waitEvent` `waitAny` `waitInView`           |
+| `Media`    | Supervise playback        | `waitCanPlay` `waitReadyState` `watchStall` `endedWithin` `finishMedia` `keepPlaying`                                              |
+| `Interact` | Interact with elements    | `click` `clickIfActionable` `setValue` `check` `press` `type` `scrollIntoView` `safePlay` `seek` …                                 |
+| `Mut`      | Observe mutation streams  | `mutStream` (with `selector` / `debounce` / `attributeFilter`)                                                                     |
+| `Doc`      | Iframe documents          | `getInnerDoc` `waitInnerDoc`                                                                                                       |
+| `Errors`   | Typed errors              | `SelSyntaxError` `ElemNotFoundError` `ElemTypeMismatchError` `CrossOriginError` `MediaPlayError` `StallError`                    |
 
 > Wait APIs are **unbounded by default** (deliberately). Bound them with `Effect.timeout`, or use `Effect.timeoutFail` to get a typed timeout error.
+
+## Documentation
+
+Full guides and API references, in both languages:
+
+- **English** — [index](./docs/en/README.md): [Guide](./docs/en/guide.md) · [Elem](./docs/en/elem.md) · [Wait](./docs/en/wait.md) · [Interact](./docs/en/interact.md) · [Media](./docs/en/media.md) · [Observers & errors](./docs/en/observers.md)
+- **简体中文** — [索引](./docs/zh/README.md)：[指南](./docs/zh/guide.md) · [Elem](./docs/zh/elem.md) · [Wait](./docs/zh/wait.md) · [Interact](./docs/zh/interact.md) · [Media](./docs/zh/media.md) · [观察器与错误](./docs/zh/observers.md)
 
 ## Installation
 
@@ -249,6 +342,18 @@ MIT
 
 ## Changelog
 
+### Unreleased
+
+- New `Media` module: `waitReadyState`, `waitCanPlay`, `watchStall`, `endedWithin`/`isEndedWithin`, `finishMedia`, `keepPlaying`.
+- New `StallError` for paused/frozen playback.
+- `Wait.until` (value-returning wait) and `Wait.waitStable` (settle detection) are now public.
+- Actionability: `Wait.isActionable`/`waitActionable` and `Interact.clickIfActionable`.
+- `Elem.addedStream`, `removedStream`, `attrStream` (dual, with `xxxOn` variants) wrap `mutStream`.
+- `isElem` resolves constructors cross-realm, so isolated worlds and subframes match correctly.
+- `Interact.setPlaybackRate`.
+- `QueryRoot` is now the precise union `Element | Document | DocumentFragment` (still including `ShadowRoot`).
+- Predicates renamed for consistency: `elemIs` → `isElem`, `exists`/`existsOn` → `isElemExists`/`isElemExistsOn`, `mediaEnded` → `isMediaEnded`.
+
 ### 0.2.0
 
 - `waitElem` now ignores added nodes of the wrong type and fails only on malformed selectors.
@@ -259,10 +364,10 @@ MIT
 - Query roots now accept any `ParentNode`, including `ShadowRoot`.
 - `mutStream` gained `selector` and `debounce` filters and `attributeFilter` names.
 
-### 0.1.0
-
-First release! :tada:
-
 ### 0.1.1
 
 Fix the example in the README.
+
+### 0.1.0
+
+First release! :tada:

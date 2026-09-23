@@ -7,10 +7,10 @@ export interface ElemCons<E extends Element> {
 
 /**
  * Any node that can be used as the root of a query. This includes
- * `Element`, `Document`, `DocumentFragment` and `ShadowRoot`, so shadow-DOM
- * components can be queried without unwrapping their host.
+ * `Element`, `Document`, `DocumentFragment` (and therefore `ShadowRoot`), so
+ * shadow-DOM components can be queried without unwrapping their host.
  */
-export type QueryRoot = ParentNode
+export type QueryRoot = Element | Document | DocumentFragment
 
 export interface MutObsOpts {
     targets: NonEmptyArray<MutObsTarget>
@@ -51,4 +51,14 @@ export interface MutObsTargetText extends MutObsTargetWithOldVal {
 
 export interface MutObsTargetWithOldVal {
     readonly withOldVal?: boolean
+}
+
+/**
+ * A single attribute change emitted by `Elem.attrStream`.
+ */
+export interface AttrChange {
+    readonly target: Element
+    readonly name: string
+    readonly value: string | null
+    readonly oldValue: string | null
 }

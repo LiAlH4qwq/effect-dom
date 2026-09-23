@@ -4,6 +4,7 @@ import {
     blur,
     check,
     click,
+    clickIfActionable,
     dispatch,
     focus,
     hover,
@@ -16,6 +17,7 @@ import {
     setChecked,
     setInputValue,
     setMuted,
+    setPlaybackRate,
     setValue,
     setVolume,
     submit,
@@ -26,6 +28,7 @@ import {
 describe("Interact", () => {
     afterEach(() => {
         document.body.innerHTML = ""
+        vi.restoreAllMocks()
     })
 
     test("click invokes the native click", async () => {
@@ -172,5 +175,45 @@ describe("Interact", () => {
         expect(media.currentTime).toBe(5)
         expect(media.muted).toBe(true)
         expect(media.volume).toBe(1)
+    })
+
+    test("setPlaybackRate sets the rate", async () => {
+        const media = document.createElement("audio")
+        await Effect.runPromise(setPlaybackRate(media, 1.5))
+        expect(media.playbackRate).toBe(1.5)
+    })
+
+    test("clickIfActionable clicks an actionable element", async () => {
+        const button = document.createElement("button")
+        document.body.appendChild(button)
+        vi.spyOn(button, "getBoundingClientRect").mockReturnValue({
+            width: 10,
+            height: 10,
+            left: 5,
+            top: 5,
+            right: 15,
+            bottom: 15,
+            x: 5,
+            y: 5,
+            toJSON: () => ({}),
+        } as DOMRect)
+        vi.spyOn(document, "elementFromPoint").mockReturnValue(button)
+        const handler = vi.fn()
+        button.addEventListener("click", handler)
+        await expect(
+            Effect.runPromise(clickIfActionable(button)),
+        ).resolves.toBe(true)
+        expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    test("clickIfActionable skips a covered element", async () => {
+        const button = document.createElement("button")
+        document.body.appendChild(button)
+        const handler = vi.fn()
+        button.addEventListener("click", handler)
+        await expect(
+            Effect.runPromise(clickIfActionable(button)),
+        ).resolves.toBe(false)
+        expect(handler).not.toHaveBeenCalled()
     })
 })

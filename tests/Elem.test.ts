@@ -1,9 +1,11 @@
-import { Effect, Either, Fiber, Option } from "effect"
+import { Chunk, Effect, Either, Fiber, Option, Stream } from "effect"
 import { afterEach, describe, expect, test } from "vitest"
 import {
+    addedStream,
+    addedStreamOn,
+    attrStream,
+    attrStreamOn,
     child,
-    exists,
-    existsOn,
     findByText,
     findByTextOn,
     findByTextOpt,
@@ -20,6 +22,11 @@ import {
     getText,
     hasAttr,
     hasClass,
+    isElem,
+    isElemExists,
+    isElemExistsOn,
+    removedStream,
+    removedStreamOn,
     waitDetached,
     waitDetachedOn,
     waitElemGone,
@@ -37,12 +44,22 @@ const fork = <A, E>(effect: Effect.Effect<A, E>, mutate: () => void) =>
         return yield* Fiber.join(fiber)
     })
 
+const collectFirst = <A>(stream: Stream.Stream<A>, mutate: () => void) =>
+    fork(
+        stream.pipe(
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.map(Chunk.toReadonlyArray),
+        ),
+        mutate,
+    )
+
 describe("Elem additions", () => {
     afterEach(() => {
         document.body.innerHTML = ""
     })
 
-    describe("findElemOpt / exists", () => {
+    describe("findElemOpt / isElemExists", () => {
         test("none when missing", async () => {
             const result = await Effect.runPromise(
                 findElemOpt(document, HTMLAudioElement, "#missing"),
@@ -80,14 +97,18 @@ describe("Elem additions", () => {
             expect(Option.getOrThrow(result)).toBe(audio)
         })
 
-        test("exists", async () => {
+        test("isElemExists", async () => {
             const audio = document.createElement("audio")
             document.body.appendChild(audio)
             await expect(
-                Effect.runPromise(exists(document, HTMLAudioElement, "audio")),
+                Effect.runPromise(
+                    isElemExists(document, HTMLAudioElement, "audio"),
+                ),
             ).resolves.toBe(true)
             await expect(
-                Effect.runPromise(exists(document, HTMLVideoElement, "audio")),
+                Effect.runPromise(
+                    isElemExists(document, HTMLVideoElement, "audio"),
+                ),
             ).resolves.toBe(false)
         })
     })
@@ -287,10 +308,10 @@ describe("Elem additions", () => {
             expect(Option.isNone(result)).toBe(true)
         })
 
-        test("existsOn", async () => {
+        test("isElemExistsOn", async () => {
             document.body.appendChild(audio())
             const result = await Effect.runPromise(
-                existsOn(document, HTMLAudioElement)(".on-target"),
+                isElemExistsOn(document, HTMLAudioElement)(".on-target"),
             )
             expect(result).toBe(true)
         })
@@ -367,6 +388,120 @@ describe("Elem additions", () => {
                     ),
                 ),
             ).resolves.toBeUndefined()
+        })
+    })
+
+    describe("realm-safe matching", () => {
+        test("resolves a foreign constructor by name", () => {
+            class ForeignHTMLAudioElement {}
+            Object.defineProperty(ForeignHTMLAudioElement, "name", {
+                value: "HTMLAudioElement",
+            })
+            const elem = document.createElement("audio")
+            document.body.appendChild(elem)
+            expect(
+                isElem(
+                    elem,
+                    ForeignHTMLAudioElement as unknown as typeof HTMLAudioElement,
+                ),
+            ).toBe(true)
+        })
+
+        test("rejects a foreign constructor for the wrong tag", () => {
+            class ForeignHTMLVideoElement {}
+            Object.defineProperty(ForeignHTMLVideoElement, "name", {
+                value: "HTMLVideoElement",
+            })
+            const elem = document.createElement("audio")
+            document.body.appendChild(elem)
+            expect(
+                isElem(
+                    elem,
+                    ForeignHTMLVideoElement as unknown as typeof HTMLVideoElement,
+                ),
+            ).toBe(false)
+        })
+    })
+
+    describe("streams", () => {
+        test("addedStream emits matching additions", async () => {
+            const result = await Effect.runPromise(
+                collectFirst(addedStream(document, ".stream-item"), () => {
+                    const div = document.createElement("div")
+                    div.className = "stream-item"
+                    document.body.appendChild(div)
+                }),
+            )
+            expect(result).toHaveLength(1)
+            expect(result[0]).toBeInstanceOf(HTMLDivElement)
+        })
+
+        test("addedStream (data-last) via addedStreamOn", async () => {
+            const result = await Effect.runPromise(
+                collectFirst(addedStreamOn(document)(".stream-item"), () => {
+                    const div = document.createElement("div")
+                    div.className = "stream-item"
+                    document.body.appendChild(div)
+                }),
+            )
+            expect(result).toHaveLength(1)
+        })
+
+        test("removedStream emits matching removals", async () => {
+            const elem = document.createElement("div")
+            elem.className = "stream-item"
+            document.body.appendChild(elem)
+            const result = await Effect.runPromise(
+                collectFirst(removedStream(document, ".stream-item"), () =>
+                    elem.remove(),
+                ),
+            )
+            expect(result).toStrictEqual([elem])
+        })
+
+        test("removedStreamOn", async () => {
+            const elem = document.createElement("div")
+            elem.className = "stream-item"
+            document.body.appendChild(elem)
+            const result = await Effect.runPromise(
+                collectFirst(removedStreamOn(document)(".stream-item"), () =>
+                    elem.remove(),
+                ),
+            )
+            expect(result).toStrictEqual([elem])
+        })
+
+        test("attrStream emits attribute changes", async () => {
+            const elem = document.createElement("div")
+            elem.className = "stream-item"
+            elem.setAttribute("data-state", "idle")
+            document.body.appendChild(elem)
+            const result = await Effect.runPromise(
+                collectFirst(
+                    attrStream(document, ".stream-item", "data-state"),
+                    () => elem.setAttribute("data-state", "ready"),
+                ),
+            )
+            expect(result).toHaveLength(1)
+            expect(result[0]).toMatchObject({
+                target: elem,
+                name: "data-state",
+                value: "ready",
+                oldValue: "idle",
+            })
+        })
+
+        test("attrStreamOn", async () => {
+            const elem = document.createElement("div")
+            elem.className = "stream-item"
+            document.body.appendChild(elem)
+            const result = await Effect.runPromise(
+                collectFirst(
+                    attrStreamOn(document)(".stream-item", "data-state"),
+                    () => elem.setAttribute("data-state", "ready"),
+                ),
+            )
+            expect(result).toHaveLength(1)
         })
     })
 })

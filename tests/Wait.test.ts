@@ -1,9 +1,12 @@
-import { Effect, Fiber } from "effect"
+import { Effect, Fiber, Option } from "effect"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import {
+    isActionable,
     isDisabled,
+    isMediaEnded,
     isVisible,
-    mediaEnded,
+    until,
+    waitActionable,
     waitAny,
     waitAttr,
     waitClass,
@@ -13,6 +16,7 @@ import {
     waitForElement,
     waitInView,
     waitMediaEnded,
+    waitStable,
     waitVisible,
 } from "../src/Wait"
 
@@ -28,6 +32,7 @@ describe("Wait", () => {
     afterEach(() => {
         document.body.innerHTML = ""
         vi.unstubAllGlobals()
+        vi.restoreAllMocks()
     })
 
     test("waitFor polls until the predicate holds", async () => {
@@ -174,7 +179,7 @@ describe("Wait", () => {
                 media.currentTime = 10
             }),
         )
-        expect(mediaEnded(media as unknown as HTMLMediaElement)).toBe(true)
+        expect(isMediaEnded(media as unknown as HTMLMediaElement)).toBe(true)
     })
 
     test("waitInView resolves once intersecting", async () => {
@@ -196,5 +201,89 @@ describe("Wait", () => {
         document.body.appendChild(div)
         const result = await Effect.runPromise(waitInView(document, ".target"))
         expect(result).toBe(div)
+    })
+
+    test("until resolves a supplied value immediately", async () => {
+        const result = await Effect.runPromise(until(() => Option.some(42)))
+        expect(result).toBe(42)
+    })
+
+    test("until waits until the value appears", async () => {
+        const result = await Effect.runPromise(
+            fork(
+                until(() => {
+                    const elem = document.querySelector(".until")
+                    return elem === null ? Option.none() : Option.some(elem)
+                }),
+                () => {
+                    const div = document.createElement("div")
+                    div.className = "until"
+                    document.body.appendChild(div)
+                },
+            ),
+        )
+        expect(result).toBeInstanceOf(HTMLDivElement)
+    })
+
+    test("waitStable resolves once the value stops changing", async () => {
+        const result = await Effect.runPromise(
+            fork(
+                waitStable(
+                    () => document.body.childElementCount,
+                    (previous, next) => previous === next,
+                    "30 millis",
+                    { interval: "10 millis" },
+                ),
+                () => document.body.appendChild(document.createElement("div")),
+            ),
+        )
+        expect(result).toBe(1)
+    })
+
+    test("isActionable checks visibility, enabledness and coverage", () => {
+        const elem = document.createElement("button")
+        document.body.appendChild(elem)
+        vi.spyOn(elem, "getBoundingClientRect").mockReturnValue({
+            width: 10,
+            height: 10,
+            left: 5,
+            top: 5,
+            right: 15,
+            bottom: 15,
+            x: 5,
+            y: 5,
+            toJSON: () => ({}),
+        } as DOMRect)
+        vi.spyOn(document, "elementFromPoint").mockReturnValue(elem)
+        expect(isActionable(elem)).toBe(true)
+
+        const other = document.createElement("div")
+        vi.spyOn(document, "elementFromPoint").mockReturnValue(other)
+        expect(isActionable(elem)).toBe(false)
+        expect(isActionable(elem, { uncovered: false })).toBe(true)
+
+        elem.style.display = "none"
+        expect(isActionable(elem, { uncovered: false })).toBe(false)
+    })
+
+    test("waitActionable resolves once the element is actionable", async () => {
+        const elem = document.createElement("button")
+        document.body.appendChild(elem)
+        vi.spyOn(elem, "getBoundingClientRect").mockReturnValue({
+            width: 10,
+            height: 10,
+            left: 5,
+            top: 5,
+            right: 15,
+            bottom: 15,
+            x: 5,
+            y: 5,
+            toJSON: () => ({}),
+        } as DOMRect)
+        vi.spyOn(document, "elementFromPoint").mockReturnValue(elem)
+        const result = await Effect.runPromise(
+            waitActionable(document, "button"),
+        )
+        expect(result).toBe(elem)
     })
 })

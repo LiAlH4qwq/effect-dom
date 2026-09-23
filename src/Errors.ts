@@ -25,3 +25,10 @@ export class MediaPlayError extends Data.TaggedError("MediaPlayError")<{
     media: HTMLMediaElement
     reason: unknown
 }> {}
+
+export class StallError extends Data.TaggedError("StallError")<{
+    media: HTMLMediaElement
+    reason: "paused" | "frozen"
+    currentTime: number
+    duration: number
+}> {}

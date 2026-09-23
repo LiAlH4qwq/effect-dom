@@ -18,7 +18,8 @@
         "rules": {
             "preset": "recommended",
             "style": {
-                "noNonNullAssertion": "off"
+                "noNonNullAssertion": "error",
+                "useConst": "error"
             },
             "suspicious": {
                 "noShadowRestrictedNames": "off"
@@ -32,6 +33,18 @@
             }
         }
     },
+    "overrides": [
+        {
+            "includes": ["tests/**"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "noNonNullAssertion": "off"
+                    }
+                }
+            }
+        }
+    ],
     "javascript": {
         "formatter": {
             "arrowParentheses": "asNeeded",

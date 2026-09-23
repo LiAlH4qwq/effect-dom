@@ -1,7 +1,7 @@
 import { Effect, Either } from "effect"
 import { afterEach, describe, expect, test } from "vitest"
 import { getInnerDoc, waitInnerDoc } from "../src/Doc"
-import { elemIs, findElem, findElems } from "../src/Elem"
+import { findElem, findElems, isElem } from "../src/Elem"
 import {
     ElemNotFoundError,
     ElemTypeMismatchError,
@@ -34,14 +34,14 @@ describe("test", () => {
         })
     })
     describe("Elem", () => {
-        describe("elemIs", () => {
+        describe("isElem", () => {
             test("is div not a audio", () => {
                 const elem = document.createElement("div")
-                expect(elemIs(elem, HTMLAudioElement)).toBe(false)
+                expect(isElem(elem, HTMLAudioElement)).toBe(false)
             })
             test("is audio a audio", () => {
                 const elem = document.createElement("audio")
-                expect(elemIs(elem, HTMLAudioElement)).toBe(true)
+                expect(isElem(elem, HTMLAudioElement)).toBe(true)
             })
         })
         describe("findElem", () => {

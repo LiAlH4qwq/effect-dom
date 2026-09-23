@@ -10,6 +10,7 @@ const input = {
     Mut: "src/Mut.ts",
     Wait: "src/Wait.ts",
     Interact: "src/Interact.ts",
+    Media: "src/Media.ts",
 }
 
 const external = [/^effect(\/.*)?$/]
